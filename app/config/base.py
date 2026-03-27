@@ -16,3 +16,10 @@ SQLALCHEMY_RECORD_QUERIES = True
 LOGFILE_PATH = os.path.join(os.getcwd(), 'logs')
 # 用户的游戏数据
 USER_GAME_DATA = os.path.join(os.getcwd(), 'app', 'static', 'uploads', 'user_game_data')
+
+WX_APP_ID = 'wx4af101973469ff70'
+WX_APP_SECRET = '32bd429ead93a022b54e8609ec7a22da'
+WX_LOGIN_URL = 'https://api.weixin.qq.com/sns/jscode2session'
+
+BAIDU_AI_API_KEY = 'xjJt8cTFOAZIw13kPYWX39wH'
+BAIDU_AI_SECRET_KEY = '1eBdyMVfJwG99Ge5t9P2J27eOwsGHwor'

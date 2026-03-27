@@ -203,6 +203,52 @@ def post_detail_fields():
     # 使用 common_fields 包装成统一的 {resid, msg, status, data}
     return common_fields(data_dict_fields)
 
+def ai_preview_fields():
+    """AI识别预览结果"""
+    data_fields = {
+        'image_url': fields.String,
+        'suggestions': fields.List(fields.Nested({
+            'name': fields.String,
+            'confidence': fields.Float
+        }))
+    }
+    return common_fields(data_fields)
+
+def get_ident_list_fields():
+    """鉴定广场列表展示字段"""
+    post_item = {
+        'id': fields.Integer,
+        'nickname': fields.String(attribute='author.nickname'),
+        'image_url': fields.String,
+        'description': fields.String,
+        'status': fields.Integer,
+        'final_species_name': fields.String,
+        # 地理位置、参与人数、时间
+        'lat': fields.Float(attribute='location_lat'),
+        'lng': fields.Float(attribute='location_lng'),
+        'address': fields.String(attribute='location_address'),
+        'participant_count': fields.Integer,
+        'upload_time': fields.String(attribute='upload_time_str'), # 对应模型中的格式化方法
+        'candidates': fields.List(fields.Nested({
+            'id': fields.Integer,
+            'species_name': fields.String,
+            'confidence': fields.Float,
+            'vote_count': fields.Integer
+        }))
+    }
+    data_fields = {
+        'species_list': fields.List(fields.Nested(post_item)),
+        'pagination': fields.Nested({
+            'total': fields.Integer, 'page': fields.Integer, 
+            'per_page': fields.Integer, 'pages': fields.Integer
+        })
+    }
+    return common_fields(data_fields)
+
+def op_id_fields():
+    """操作成功返回ID"""
+    return common_fields({'id': fields.Integer})
+
 def game_user_ranking_fields():
     data_field = {
         'uid': fields.Integer(default=0),

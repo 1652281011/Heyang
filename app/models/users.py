@@ -21,7 +21,30 @@ class User(db.Model, BaseModel):
     account_status = db.Column(db.String(10), default='1', comment='1正常, 0禁用')
     role_type = db.Column(db.String(20), default='1', comment='1:普通, 2:专业')
 
+    openid = db.Column(db.String(100), unique=True, index=True)
+
     pro_info = db.relationship('ProfessionalInfo', back_populates='user', uselist=False)
+
+
+
+    @staticmethod
+    def get_or_create_by_openid(openid):
+        """根据openid获取用户，不存在则创建"""
+        user = User.query.filter_by(openid=openid).first()
+        if not user:
+            # 创建新用户，初始用户名为openid(或随机)，昵称设为默认
+            user = User(
+                openid=openid,
+                username=openid[:15], # 暂时占位，建议后续引导用户绑定手机号
+                password=generate_password_hash("default_pwd"), # 随机密码
+                nickname=u"微信用户",
+                role_type='1',
+                c_time=int(time.time()),
+                e_time=int(time.time())
+            )
+            db.session.add(user)
+            db.session.commit()
+        return user
 
     # 校验密码
     def check_password(self, password_plain):

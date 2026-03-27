@@ -183,7 +183,7 @@ def post_delete_parser():
     parser.add_argument('post_id', type=int, required=True, location=['json', 'args'], help="帖子ID不能为空")
     return parser.parse_args()
 
-def post_update_parser():
+def post_update_parser(): 
     """修改帖子参数解析器 (仅限文本和状态)"""
     parser = reqparse.RequestParser()
     # 帖子ID必须传
@@ -199,7 +199,6 @@ def post_update_parser():
 def post_interact_parser():
     parser = reqparse.RequestParser()
     parser.add_argument('post_id', type=int, location='json', required=True)
-    parser.add_argument('user_id', type=int, location='json', required=True)
     parser.add_argument('content', type=str, location='json') # 仅评论需要
     return parser.parse_args()
 
@@ -240,6 +239,82 @@ def user_password_update_parser():
     parser = reqparse.RequestParser()
     parser.add_argument('old_password', type=str, location='json', required=True, help=u'旧密码必填')
     parser.add_argument('new_password', type=str, location='json', required=True, help=u'新密码必填')
+    return parser.parse_args()
+
+# --- 1. AI识别预览阶段 ---
+def species_ident_preview_parser():
+    """上传图片进行AI识别预览时的参数"""
+    parser = reqparse.RequestParser()
+    # 接收文件对象，location='files' 对应 multipart/form-data
+    parser.add_argument(
+        'image', 
+        type=werkzeug.datastructures.FileStorage, 
+        location='files', 
+        required=True, 
+        help=u'请上传待识别的物种图片'
+    )
+    return parser.parse_args()
+
+# --- 2. 广场列表筛选阶段 ---
+def species_post_search_parser():
+    """获取鉴定广场列表时的分页与过滤参数"""
+    parser = reqparse.RequestParser()
+    parser.add_argument('page', type=int, default=1, location='args')
+    parser.add_argument('per_page', type=int, default=10, location='args')
+    parser.add_argument(
+        'status', 
+        type=int, 
+        choices=[0, 1], 
+        location='args', 
+        help=u'状态过滤：0待鉴定, 1已确认'
+    )
+    return parser.parse_args()
+
+# --- 3. 发起鉴定贴阶段 ---
+def species_post_create_parser():
+    """用户正式发布鉴定请求到广场的参数"""
+    parser = reqparse.RequestParser()
+    parser.add_argument('image_url', type=str, required=True, location='json', help=u'图片地址不能为空')
+    parser.add_argument('description', type=str, location='json')
+    
+    # 地理位置信息 (float类型接收经纬度)
+    parser.add_argument('lat', type=float, location='json', help=u'纬度坐标')
+    parser.add_argument('lng', type=float, location='json', help=u'经度坐标')
+    parser.add_argument('address', type=str, location='json', help=u'地理位置描述')
+    
+    # AI给出的建议标签列表，接收JSON Array: [{"name": "xxx", "confidence": 0.9}, ...]
+    parser.add_argument(
+        'suggestions', 
+        type=list, 
+        location='json', 
+        required=True, 
+        help=u'算法识别结果列表不能为空'
+    )
+    return parser.parse_args()
+
+# --- 4. 社区投票阶段 ---
+def species_vote_parser():
+    """用户对某个候选物种标签进行投票"""
+    parser = reqparse.RequestParser()
+    parser.add_argument('post_id', type=int, required=True, location='json', help=u'帖子ID不能为空')
+    parser.add_argument('candidate_id', type=int, required=True, location='json', help=u'所选标签ID不能为空')
+    return parser.parse_args()
+
+# --- 5. 专家确认阶段 ---
+def species_expert_confirm_parser():
+    """专家或管理员最终确认物种结果"""
+    parser = reqparse.RequestParser()
+    parser.add_argument('post_id', type=int, required=True, location='json', help=u'帖子ID不能为空')
+    parser.add_argument('candidate_id', type=int, required=True, location='json', help=u'确定的正确候选标签ID不能为空')
+    return parser.parse_args()
+
+def wx_login_parser():
+    parser = reqparse.RequestParser()
+    # 小程序通过 wx.login() 获取的 code
+    parser.add_argument('code', type=str, required=True, location='json', help="code不能为空")
+    # 可选：头像和昵称（如果前端已获取）
+    parser.add_argument('nickname', type=str, location='json')
+    parser.add_argument('avatar', type=str, location='json')
     return parser.parse_args()
 
 # 兼容性/通用 解析器 (防止旧的 import 报错)

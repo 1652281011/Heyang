@@ -29,6 +29,10 @@ from app.api.v1.apps.datetime.datetime import DateTime
 
 
 
+from app.api.v1.apps.identify.ai_ident import SpeciesAIPreview
+from app.api.v1.apps.identify.post_identify import SpeciesPostAction
+from app.api.v1.apps.identify.post_list import SpeciesPostList
+from app.api.v1.apps.identify.species_vote import SpeciesVoteAction
 from app.api.v1.apps.professor.apply import ProfessionalApplyResource
 
 from app.api.test import Test1
@@ -40,6 +44,7 @@ from app.api.v1.apps.user.sign_in import SignIn
 from app.api.v1.apps.user.update_info import UserInfoResource
 from app.api.v1.apps.user.update_password import UserPasswordResource
 from app.api.v1.apps.user.user_info import UserFullInfoResource
+from app.api.v1.apps.user.wx_login import WXLoginResource
 
 RESOURCES = [
     (Test1, '/v1/test'),
@@ -52,6 +57,8 @@ RESOURCES = [
     (UserInfoResource, '/v1/user/updinfo'),
     (UserPasswordResource, '/v1/user/updpwd'),
     (UserFullInfoResource, '/v1/user/info'),
+
+    (WXLoginResource, '/v1/user/wx_login'),
     
     (AdminRegister, '/v1/admin/register'),
     (AdminSignIn, '/v1/admin/sign-in'),
@@ -79,5 +86,10 @@ RESOURCES = [
     (MyPostListResource, '/v1/community/myposts'),
     (MyLikedPostResource, '/v1/community/myliked'),
     (LikeResource, '/v1/community/like'),
-    (CommentResource, '/v1/community/comment')
+    (CommentResource, '/v1/community/comment'),
+
+    (SpeciesAIPreview, '/v1/identify/aiprevew'),
+    (SpeciesPostAction, '/v1/identify/post'),
+    (SpeciesPostList, '/v1/identify/list'),
+    (SpeciesVoteAction, '/v1/identify/vote')
 ]

@@ -3,7 +3,6 @@ import time
 from .base import db, BaseModel
 
 class Post(db.Model, BaseModel):
-    # 【核心修改】确保表名匹配数据库中的 post_info
     __tablename__ = 'post_info'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
