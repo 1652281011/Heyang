@@ -19,9 +19,15 @@ class ProfessionalInfo(db.Model, BaseModel):
     reject_reason = db.Column(db.String(255), comment='拒绝理由')
     audit_time = db.Column(db.Integer, comment='审核时间')
 
-    # 关联 User 对象
-    user = db.relationship('User', back_populates='pro_info')
-    auditor = db.relationship('Admin', foreign_keys=[auditor_id])
+    # # 关联 User 对象
+    # admin_id = db.Column(db.Integer, db.ForeignKey('user_info.id')) 
+    
+    # # 关系指向 User 类
+    # auditor = db.relationship(
+    #     'User', 
+    #     foreign_keys=[admin_id], 
+    #     backref='audited_professors'
+    # )
 
     @property
     def auditor_name(self):

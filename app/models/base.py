@@ -15,6 +15,7 @@ class BaseModel:
     # c_time = db.Column(db.DateTime, server_default=func.now())
     # # 更新时间
     # e_time = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
+    __abstract__ = True
     c_time = db.Column(db.Integer, default=lambda: int(time.time()))
     e_time = db.Column(db.Integer, default=lambda: int(time.time()), onupdate=lambda: int(time.time()))
 

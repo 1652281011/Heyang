@@ -7,6 +7,7 @@
 from datetime import datetime, timedelta, date, time
 
 from flask import Flask
+from flask_mail import Mail
 from flask_migrate import Migrate
 from flask_redis import FlaskRedis
 from flask_restful import Api
@@ -23,11 +24,12 @@ from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, ro
 from flask import g, current_app, jsonify, request
 
 from app.models.professor import ProfessionalInfo
-from app.models.admin import Admin
+# from app.models.admin import Admin
 
 redis_store = FlaskRedis(decode_responses=True)
 migrate = Migrate()
 app_api = Api()
+mail = Mail()
 
 async_mode = None
 # socketio = SocketIO(app, async_mode=async_mode)
@@ -44,6 +46,7 @@ def create_app(config_name='development'):
     db.init_app(app)
     migrate.init_app(app, db)
     redis_store.init_app(app)
+    mail.init_app(app)
 
     register_blueprints(app=app)
     app_api.app = app
@@ -58,18 +61,18 @@ def create_app(config_name='development'):
 
     scheduler.start()
 
-    @app.before_request
-    def before_request_handler():
-        """
-        全局拦截器：在每个请求进入逻辑前运行。
-        它负责从 Postman/前端发送的 Headers 中提取数据并存入 g。
-        """
-        # 注意：这里的 Key 必须和 Postman Headers 里的 Key 完全一致
-        g.auth_token = request.headers.get('auth-token')
-        g.api_type = request.headers.get('api-type', 'user')
-        g.app_type = request.headers.get('app-type', 'web')
-        # g.current_user_id = request.headers.get('Current-User-Id')
-        print(f"Token is: {g.auth_token}")
+    # @app.before_request
+    # def before_request_handler():
+    #     """
+    #     全局拦截器：在每个请求进入逻辑前运行。
+    #     它负责从 Postman/前端发送的 Headers 中提取数据并存入 g。
+    #     """
+    #     # 注意：这里的 Key 必须和 Postman Headers 里的 Key 完全一致
+    #     g.auth_token = request.headers.get('auth-token')
+    #     g.api_type = request.headers.get('api-type', 'user')
+    #     g.app_type = request.headers.get('app-type', 'web')
+    #     # g.current_user_id = request.headers.get('Current-User-Id')
+    #     print(f"Token is: {g.auth_token}")
 
 
 
@@ -278,43 +281,45 @@ def register_hooks(app):
     @app.before_request
     def before_request():
         """
-        全局拦截器：解析 Token 并设置 g.user 身份
+        统一全局拦截器：解析 Token 并注入 g.user
         """
+        # 1. 初始化
         g.user = None
         g.auth_token = None
-        # 获取平台类型，用于 Redis Key 拼接，默认为 web
-        g.app_type = request.headers.get('App-Type') or request.headers.get('app-type') or 'web'
         
-        # 1. 获取 Token (兼容大小写)
-        token = request.headers.get('Auth-Token') or request.headers.get('auth-token')
+        # 2. 获取 Headers (统一处理大小写)
+        # 优先从 Headers 获取 app-type，默认设为 'web' (因为专家通常在 web 端)
+        g.app_type = request.headers.get('app-type') or request.headers.get('App-Type') or 'web'
+        token = request.headers.get('auth-token') or request.headers.get('Auth-Token')
         
-        if token:
-            # 如果是 'Bearer <token>' 格式，去掉前缀
-            if token.startswith('Bearer '):
-                token = token.split(' ')[1]
+        if not token:
+            # print("DEBUG: 请求未携带 Token")
+            return
 
-            g.auth_token = token
-            
-            # 2. 【第一层验证：管理员】
-            # Admin 通常有独立的账号体系
-            admin_user = Admin.verify_auth_token(token)
-            if admin_user:
-                g.user = admin_user
-                g.user.role = 'admin'
-                return
+        # 处理 Bearer 格式
+        if token.startswith('Bearer '):
+            token = token.split(' ')[1]
+        
+        g.auth_token = token
 
-            # 3. 【第二层验证：主用户体系（包含普通用户和专业用户）】
-            # 重要：不要调用 ProfessionalInfo.verify_auth_token，因为它不存在
-            # 统一调用 User 模型的验证方法
-            from app.models.users import User # 确保导入了 User 模型
-            common_user = User.verify_auth_token(token, app_type=g.app_type)
+        # 3. 解析 Token 获取用户对象
+        try:
+            from app.models.users import User
+            # 注意：确认 verify_auth_token 内部逻辑是否依赖 app_type
+            current_user = User.verify_auth_token(token, app_type=g.app_type)
             
-            if common_user:
-                g.user = common_user
-                # 根据数据库中的 role_type 字段区分身份
-                # 假设 '1' 是普通用户，'2' 是专业用户
-                if str(common_user.role_type) == '2':
-                    g.user.role = 'professional' # 标记身份为专业用户
-                else:
-                    g.user.role = 'user'         # 标记身份为普通用户
-                return
+            if current_user:
+                g.user = current_user
+                # 挂载角色标签
+                rt = str(current_user.role_type)
+                if rt == '9': g.user.role = 'super_admin'
+                elif rt == '8': g.user.role = 'admin'
+                elif rt == '2': g.user.role = 'professional'
+                else: g.user.role = 'user'
+                uid = getattr(current_user, 'id', 'n/a')
+                print(f"成功识别用户: {current_user.username} (ID: {uid}), 角色: {g.user.role}")
+            else:
+                print(f"Token 解析失败: Token 可能是无效的或在 Redis 中已过期。App-Type: {g.app_type}")
+                
+        except Exception as e:
+            print(f"拦截器解析异常: {str(e)}")

@@ -1,64 +1,67 @@
+# app/api/v1/apps/expert/species_upload.py
 from flask import g
 from flask_restful import Resource
 from app.api.common.response import success, error
-from app.api.common.parser import species_upload_parser
-from app.utils.decorators import professor_required
+from app.api.common.parser import species_upload_parser # 请确保 parser 包含下方所有 Key
+from app.utils.decorators import expert_required
 from app.models.species_audit import SpeciesAudit
 from app.models.species import Species
 
 class SpeciesUploadResource(Resource):
-    
-    method_decorators = [professor_required]  # 仅教授可用
-    
+    method_decorators = [expert_required]
+
     def post(self):
-        """
-        教授提交物种数据
-        逻辑：如果是 update，必须通过 scientific_name 找到原物种
-        """
+        """专家提交物种数据申请"""
         args = species_upload_parser()
         op_type = args['operate_type']
-        scientific_name = args['scientific_name'] 
+        s_name = args['species_name']  # 学名
+        c_name = args['chinese_name']  # 中文名
         
-        target_species_id = None
+        target_id = None
 
         if op_type == 'update':
-            # 1. 根据学名查找是否存在
-            target_species = Species.query.filter_by(scientific_name=scientific_name).first()
-            
-            if not target_species:
-                return error(msg=f'未找到学名为 [{scientific_name}] 的物种，无法修改。请检查拼写或选择“新增”。')
-            
-            # 2. 记录目标ID，方便管理员审核时直接定位
-            target_species_id = target_species.species_id
-
+            # 优先按学名找，找不到按中文名找
+            target = Species.query.filter((Species.species_name == s_name) | (Species.chinese_name == c_name)).first()
+            if not target:
+                return error(msg=f'未找到物种[{c_name}]，请检查名称或选择“新增”模式')
+            target_id = target.species_id
 
         elif op_type == 'add':
-            # 1. 检查学名是否已存在，防止重复添加
-            exists = Species.query.filter_by(scientific_name=scientific_name).first()
-            if exists:
-                return error(msg=f'学名为 [{scientific_name}] 的物种已存在，请勿重复添加。')
+            # 检查是否已存在
+            if Species.query.filter((Species.species_name == s_name) | (Species.chinese_name == c_name)).first():
+                return error(msg='该物种已存在于正式库中，请勿重复添加')
 
-            target_species_id = None
-
+        # 构建完整的 20 个业务字段快照
         data_snapshot = {
-            "species_id": target_species_id if target_species_id else None,
-            "scientific_name": scientific_name,
-            "chinese_name": args['chinese_name'],
-            "english_name": args['english_name'],
-            "species": args['species'],
-            "order_name": args['order_name'],
-            "family": args['family'],
-            "description": args['description']
+            "order_name": args.get('order_name'),
+            "family_name": args.get('family_name'),
+            "species_name": s_name,
+            "chinese_name": c_name,
+            "english_name": args.get('english_name'),
+            "nomenclator": args.get('nomenclator'),
+            "naming_year": args.get('naming_year'),
+            "type_specimen_record": args.get('type_specimen_record'),
+            "type_locality": args.get('type_locality'),
+            "latitude": args.get('latitude'),
+            "longitude": args.get('longitude'),
+            "repository": args.get('repository'),
+            "repository_country": args.get('repository_country'),
+            "synonyms": args.get('synonyms'),
+            "subspecies": args.get('subspecies'),
+            "domestic_distribution": args.get('domestic_distribution'),
+            "foreign_distribution": args.get('foreign_distribution'),
+            "references": args.get('references'),
+            "diagnostic_features": args.get('diagnostic_features')
         }
 
         try:
-            audit = SpeciesAudit.create_audit(
-                applicant_id=g.user.professor_id,
+            # 这里的 g.user.id 对应你的申请人 ID
+            SpeciesAudit.create_audit(
+                applicant_id=g.user.id, 
                 operate_type=op_type,
-                target_id=target_species_id,
+                target_id=target_id,
                 data_dict=data_snapshot
             )
-            return success(msg='提交成功，数据已进入审核队列')
-            
+            return success(msg='申请已提交，请等待管理员审核')
         except Exception as e:
-            return error(msg='提交失败: ' + str(e))
+            return error(msg=f'提交失败: {str(e)}')

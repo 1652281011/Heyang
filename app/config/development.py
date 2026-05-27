@@ -3,6 +3,8 @@
 # @Time : 2022/7/27 16:07 
 # @Author : Scott
 # @Software: PyCharm
+from flask import app
+from flask_mail import Mail
 from app.config.base import *
 
 DEBUG = True
@@ -36,3 +38,12 @@ SCHEDULER_JOB_DEFAULTS = {
     'coalesce': False,
     'max_instances': 3
 }
+
+MAIL_SERVER = 'smtp.qq.com'
+MAIL_PORT = 465
+MAIL_USE_SSL = True
+
+MAIL_DEFAULT_SENDER = '1652281011@qq.com'
+
+MAIL_USERNAME = '1652281011@qq.com'
+MAIL_PASSWORD = 'xkptwwbwstwjbigf'

@@ -1,84 +1,62 @@
 # app/models/species.py
-import base64
-import random
-from time import time
-from flask import current_app, g
-from itsdangerous import URLSafeTimedSerializer as Serializer, SignatureExpired, BadSignature
+import datetime
+import time
 from app.models import db
-from app.api.common.fields import get_species_list_fields
-from app.utils.common import md5_str, time_to_str
+from app.models.base import BaseModel
 
-class Species(db.Model):
+class Species(db.Model, BaseModel):
     __tablename__ = 'species_info'
-    __table_args__ = {'comment': '物种基本信息表'}
+    __table_args__ = {'comment': '哺乳动物物种基本信息表'}
 
     species_id = db.Column(db.Integer, primary_key=True, autoincrement=True, nullable=False, comment='物种ID')
-    chinese_name = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, unique=True, comment='物种中文名')
-    english_name = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, comment='物种英文名')
-    species = db.Column(db.String(300, collation='utf8mb4_unicode_ci'), nullable=False, comment='种')
-    order_name = db.Column(db.String(50, collation='utf8mb4_unicode_ci'), nullable=False, comment='目')
-    family = db.Column(db.String(50, collation='utf8mb4_unicode_ci'), nullable=False, comment='科')
-    collection_province = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, comment='模式标本采集地点中文名')
-    scientific_name = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, unique=True, comment='物种学名')
-    grade = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, comment='保护级别')
-    description = db.Column(db.String(500, collation='utf8mb4_unicode_ci'), nullable=True, comment='物种描述')
-    distribution = db.Column(db.String(500, collation='utf8mb4_unicode_ci'), nullable=True, comment='地理分布')
-    epidemic = db.Column(db.String(50, collation='utf8mb4_unicode_ci'), nullable=True, comment='疫源记录')
-    sequense = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, comment='分子靶标序列')
+    
+    # 基础分类
+    order_name = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=False, comment='目')
+    family_name = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=False, comment='科')
+    species_name = db.Column(db.String(200, collation='utf8mb4_unicode_ci'), nullable=False, comment='物种(学名)')
+    chinese_name = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, unique=True, comment='中文名')
+    english_name = db.Column(db.String(150, collation='utf8mb4_unicode_ci'), nullable=True, comment='英文名')
+    
+    # 命名与标本
+    nomenclator = db.Column(db.String(200, collation='utf8mb4_unicode_ci'), nullable=True, comment='命名人')
+    naming_year = db.Column(db.String(50, collation='utf8mb4_unicode_ci'), nullable=True, comment='命名年代')
+    type_specimen_record = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='原始描述中记录模式标本')
+    type_locality = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='模式标本采集地点')
+    latitude = db.Column(db.String(50, collation='utf8mb4_unicode_ci'), nullable=True, comment='纬度')
+    longitude = db.Column(db.String(50, collation='utf8mb4_unicode_ci'), nullable=True, comment='经度')
+    repository = db.Column(db.String(255, collation='utf8mb4_unicode_ci'), nullable=True, comment='模式标本保存地')
+    repository_country = db.Column(db.String(100, collation='utf8mb4_unicode_ci'), nullable=True, comment='模式标本保存国家')
+    
+    # 特征与分布
+    synonyms = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='同物异名')
+    subspecies = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='亚种分化')
+    domestic_distribution = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='国内分布')
+    foreign_distribution = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='国外分布')
+    references = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='引证文献')
+    diagnostic_features = db.Column(db.Text(collation='utf8mb4_unicode_ci'), nullable=True, comment='鉴别特征')
 
-    @staticmethod
-    def get_species_list(page=1, per_page=20, keyword=None, species=None, order_name=None, family=None):
-        """
-        获取物种列表，支持多条件筛选
-        """
-        query = Species.query
+    c_time = db.Column(db.Integer, default=lambda: int(time.time()), comment='创建时间')
+    e_time = db.Column(db.Integer, default=lambda: int(time.time()), onupdate=lambda: int(time.time()), comment='更新时间')
 
-        # 1. 关键词通用搜索 (如果传了 keyword)
-        if keyword:
-            query = query.filter(
-                db.or_(
-                    Species.chinese_name.like(f'%{keyword}%'),
-                    Species.english_name.like(f'%{keyword}%'),
-                    Species.scientific_name.like(f'%{keyword}%')
-                )
-            )
+    @property
+    def c_time_format(self):
+        # 这里的 self.c_time 继承自 BaseModel
+        return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.c_time)) if self.c_time else ""
 
-        # 2. 针对“种”的筛选
-        if species:
-            query = query.filter(Species.species.like(f'%{species}%'))
+    @property
+    def e_time_format(self):
+        return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.e_time)) if self.e_time else ""
 
-        # 3. 针对“目”的筛选
-        if order_name:
-            query = query.filter(Species.order_name.like(f'%{order_name}%'))
-
-        # 4. 针对“科”的筛选
-        if family:
-            query = query.filter(Species.family.like(f'%{family}%'))
-
-        # 排序：默认按物种ID排序
-        query = query.order_by(Species.species_id.asc())
-
-        # 分页
-        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-        return pagination.items, pagination.total
-
-    # === 序列化方法 ===
     def to_dict(self):
-        """返回该物种的所有信息"""
-        res = {
-            "species_id": self.species_id,
-            "chinese_name": self.chinese_name,
-            "english_name": self.english_name,
-            "species": self.species,
-            "order_name": self.order_name,
-            "family": self.family,
-            "collection_province": self.collection_province,
-            "scientific_name": self.scientific_name,
-            "grade": self.grade,
-            "description": self.description,
-            "distribution": self.distribution,
-            "epidemic": self.epidemic,
-            "sequense": self.sequense
-        }
-        return res
+        """
+        将模型对象转换为字典
+        """
+        # 1. 动态获取所有数据库列的值
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        
+        # 2. 用格式化后的字符串覆盖原本的整数时间戳
+        # 这样返回给前端的 c_time 就是 "2026-04-22 00:16:54"
+        data['c_time'] = self.c_time_format
+        data['e_time'] = self.e_time_format
+        
+        return data

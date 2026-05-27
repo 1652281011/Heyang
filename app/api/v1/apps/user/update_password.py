@@ -2,7 +2,7 @@ from flask import g
 from flask_restful import Resource
 from app.models.users import User
 from app.api.common.response import success, error
-from app.api.common.parser import user_password_update_parser, user_update_parser
+from app.api.common.parser import user_password_update_parser
 from app.utils.decorators import login_required
 
 class UserPasswordResource(Resource):

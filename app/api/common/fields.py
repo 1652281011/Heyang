@@ -4,6 +4,7 @@
 # @Software：PyCharm
 # @Author  : scott
 from flask_restful import fields
+from sqlalchemy import Float
 
 
 def common_fields(data_fileds=None, is_list=False):
@@ -72,13 +73,13 @@ def user_fields():
         'username': fields.String(default=''),   # 手机号
         'nickname': fields.String(default=''),   # 昵称
         'e_time': fields.String(default=''),      # 登陆时间
+        'role_type': fields.String(default=''),
         'auth_token': fields.String(default='')  # 登录凭证
     }
     return common_fields(data_fields)
 
 def user_upd_fields():
     data_fields = {
-        'id': fields.Integer(default=0),
         'username': fields.String(default=''),    # 手机号
         'nickname': fields.String(default=''),    # 昵称
         'avatar': fields.String(default=''),      # 头像地址
@@ -86,7 +87,6 @@ def user_upd_fields():
         'bio': fields.String(default=''),         # 简介
         'tags': fields.String(default=''),        # 标签串
         'e_time': fields.String(attribute='e_time', default=''), # 修改/登录时间
-        'auth_token': fields.String(default='')   # 修改资料通常不返回新Token，可留空
     }
     return common_fields(data_fields)
 
@@ -219,7 +219,7 @@ def get_ident_list_fields():
     post_item = {
         'id': fields.Integer,
         'nickname': fields.String(attribute='author.nickname'),
-        'image_url': fields.String,
+        'image_url': fields.String(attribute='full_image_url'),
         'description': fields.String,
         'status': fields.Integer,
         'final_species_name': fields.String,
@@ -229,6 +229,7 @@ def get_ident_list_fields():
         'address': fields.String(attribute='location_address'),
         'participant_count': fields.Integer,
         'upload_time': fields.String(attribute='upload_time_str'), # 对应模型中的格式化方法
+        'my_vote_id': fields.Integer(default=0),
         'candidates': fields.List(fields.Nested({
             'id': fields.Integer,
             'species_name': fields.String,
@@ -245,9 +246,251 @@ def get_ident_list_fields():
     }
     return common_fields(data_fields)
 
+def get_post_create_res_fields():
+    """
+    发布帖子后的返回字段定义
+    包含：基本信息、状态、参与人数、格式化时间、候选标签列表
+    """
+    candidate_item = {
+        'id': fields.Integer,
+        'species_name': fields.String,
+        'confidence': fields.Float,
+        'vote_count': fields.Integer
+    }
+
+    data_fields = {
+        'id': fields.Integer,
+        'image_url': fields.String(attribute='full_image_url'),
+        'description': fields.String,
+        'status': fields.Integer,
+        'participant_count': fields.Integer,
+        'upload_time': fields.String(attribute='format_time'), # 对应模型中的 format_time 属性
+        'lat': fields.Float(attribute='location_lat'),
+        'lng': fields.Float(attribute='location_lng'),
+        'address': fields.String(attribute='location_address'),
+        'candidates': fields.List(fields.Nested(candidate_item))
+    }
+
+    return common_fields(data_fields)
+
+def get_vote_res_fields():
+    """
+    投票操作成功后的返回字段
+    用于实时刷新前端的票数进度条和参与人数
+    """
+    # 候选标签项（含更新后的票数）
+    candidate_item = {
+        'id': fields.Integer,
+        'species_name': fields.String,
+        'vote_count': fields.Integer
+    }
+
+    data_fields = {
+        'post_id': fields.Integer(attribute='id'),
+        'participant_count': fields.Integer,
+        'my_vote_id': fields.Integer, # 当前用户最终投给的标签ID
+        'candidates': fields.List(fields.Nested(candidate_item))
+    }
+
+    return common_fields(data_fields)
+
+def get_expert_confirm_res_fields():
+    """专家鉴定后的返回结构：包含专家身份背书"""
+    
+    # 专家专业详情
+    expert_pro_fields = {
+        'real_name': fields.String,
+        'title': fields.String,
+        'organization': fields.String,
+        'expertise': fields.String
+    }
+
+    data_fields = {
+        'post_id': fields.Integer(attribute='id'),
+        'status': fields.Integer,
+        'final_species_name': fields.String,
+        'expert_opinion': fields.String,
+        # 嵌套专家信息
+        'expert_details': fields.Nested(expert_pro_fields, attribute='expert_display_info'),
+        'confirm_time': fields.String(attribute='format_e_time') 
+    }
+    
+    return common_fields(data_fields)
+
+def get_ident_detail_fields():
+
+    # 1. 专家身份背书结构
+    expert_info_fields = {
+        'real_name': fields.String,
+        'pro_title': fields.String,
+        'organization': fields.String,
+        'expertise_field': fields.String
+    }
+
+    # 2. 候选标签结构
+    candidate_item = {
+        'id': fields.Integer,
+        'species_name': fields.String,
+        'confidence': fields.Float,
+        'vote_count': fields.Integer
+    }
+
+    # 3. 详情主体结构
+    data_fields = {
+        'id': fields.Integer,
+        'user_id': fields.Integer,
+        'nickname': fields.String(attribute='author.nickname'),
+        'avatar': fields.String(attribute='author.avatar'),
+        
+        'image_url': fields.String(attribute='full_image_url'),
+        'description': fields.String,
+        'status': fields.Integer,
+        'upload_time': fields.String(attribute='format_time'),
+        'participant_count': fields.Integer,
+        
+        # 地理位置
+        'lat': fields.Float(attribute='location_lat'),
+        'lng': fields.Float(attribute='location_lng'),
+        'address': fields.String(attribute='location_address'),
+        
+        # 当前用户的投票状态 (未登录或未投票则为 0)
+        'my_vote_id': fields.Integer(default=0),
+        
+        # 专家鉴定结果及意见
+        'final_species_name': fields.String,
+        'expert_opinion': fields.String,
+        'expert_info': fields.Nested(expert_info_fields, attribute='expert_professional_data', allow_null=True),
+        
+        # 候选标签列表
+        'candidates': fields.List(fields.Nested(candidate_item))
+    }
+
+    return common_fields(data_fields)
+
 def op_id_fields():
     """操作成功返回ID"""
     return common_fields({'id': fields.Integer})
+
+def get_species_detail_fields():
+    # 1. 定义多媒体子项的结构 (对应新的数据库字段)
+    media_item = {
+        'media_id': fields.Integer,
+        'file_url': fields.String,
+        'thumbnail_url': fields.String,
+        'title': fields.String,
+        # 虽然逻辑在后端分好了类，但返回具体的类型字段方便前端做校验或逻辑判断
+        'media_type': fields.String,
+        'media_category': fields.String,
+        'morphology_type': fields.String,
+        'model_category': fields.String
+    }
+
+    # 2. 核心业务字段
+    data_fields = {
+        'species_id': fields.Integer,
+        'chinese_name': fields.String(default=''),
+        'english_name': fields.String(default=''),
+        'species_name': fields.String(default=''),
+        'order_name': fields.String(default=''),
+        'family_name': fields.String(default=''),
+        'nomenclator': fields.String(default=''),
+        'naming_year': fields.String(default=''),
+        'type_locality': fields.String(default=''),
+        'latitude': fields.String(default=''),
+        'longitude': fields.String(default=''),
+        'domestic_distribution': fields.String(default=''),
+        'foreign_distribution': fields.String(default=''),
+        'diagnostic_features': fields.String(default=''),
+        'references': fields.String(default=''),
+        'synonyms': fields.String(default=''),
+        'subspecies': fields.String(default=''),
+        'c_time': fields.String, 
+        'e_time': fields.String,
+        
+        # 普通展示模块 (所有人可见)
+        'normal_media': fields.Nested({
+            'images': fields.List(fields.Nested(media_item)),
+            'videos': fields.List(fields.Nested(media_item))
+        }),
+        
+        # [形态学信息] 模块 (仅专业人员可见)
+        # 使用 allow_null=True，当后端返回 None 时，前端收到 null 而不是结构体
+        'morphology_info': fields.Nested({
+            'specimen_photos': fields.List(fields.Nested(media_item)), # 对应 标本模型
+            'sections': fields.List(fields.Nested(media_item)),        # 对应 切片
+            'models_3d': fields.Nested({                               # 对应 三维模型
+                'organ': fields.List(fields.Nested(media_item)),       # 对应 器官
+                'skeleton': fields.List(fields.Nested(media_item)),    # 对应 骨骼
+                'tissue': fields.List(fields.Nested(media_item))       # 对应 组织
+            })
+        }, allow_null=True)
+    }
+
+    # 调用你统一的包装函数
+    return common_fields(data_fields)
+
+def get_admin_user_fields():
+    """
+    专门给管理员管理界面使用的字段定义
+    """
+    data_fields = {
+        'id': fields.Integer,
+        'username': fields.String,
+        'nickname': fields.String,
+        'account_status': fields.String,
+        'role_type': fields.String,
+        'c_time': fields.Integer,
+        'e_time': fields.Integer
+    }
+    return common_fields(data_fields)
+
+def get_import_result_fields():
+    # 失败项的结构
+    error_detail = {
+        'line': fields.Integer,     # Excel 行号
+        'item': fields.String,      # 物种名称标识
+        'reason': fields.String     # 失败具体原因
+    }
+    
+    data_fields = {
+        'total': fields.Integer,
+        'success': fields.Integer,
+        'fail': fields.Integer,
+        'error_details': fields.List(fields.Nested(error_detail))
+    }
+    return common_fields(data_fields) # 包装成你统一的 resid/msg 格式
+
+# 审核记录基础字段
+audit_base_fields = {
+    'audit_id': fields.Integer,
+    'applicant_id': fields.String,
+    'target_species_id': fields.String,
+    'operate_type': fields.String,
+    'status': fields.Integer,
+    'reject_reason': fields.String,
+    'create_time': fields.Integer,
+    'audit_time': fields.Integer,
+    'auditor_id': fields.Integer
+}
+
+def get_audit_list_fields():
+    """列表结构：不返回巨大的 snapshot，只返回摘要"""
+    data_schema = {
+        'audit_list': fields.List(fields.Nested(audit_base_fields)),
+        'pagination': fields.Nested({
+            'total': fields.Integer,
+            'page': fields.Integer,
+            'per_page': fields.Integer
+        })
+    }
+    return common_fields(data_schema)
+
+def get_audit_detail_fields():
+    """详情结构：包含解析后的内容快照"""
+    full_fields = audit_base_fields.copy()
+    # 增加 content 字段，对应解析后的 JSON 字典
+    full_fields['content'] = fields.Raw 
+    return common_fields(full_fields)
 
 def game_user_ranking_fields():
     data_field = {
@@ -559,35 +802,24 @@ def get_admin_list_fields():
 
 def get_species_list_fields():
 
-    species_item_fields = {
-        'species_id': fields.String(default=''),
-        'chinese_name': fields.String(default=''),
-        'english_name': fields.String(default=''),
-        'species': fields.String(default=''),
-        'order_name': fields.String(default=''),
-        'family': fields.String(default=''),
-        'collection_province': fields.String(default=''),
-        'scientific_name': fields.String(default=''),
-        'grade': fields.String(default=''),
-        'description': fields.String(default=''),
-        'distribution': fields.String(default=''),
-        'epidemic': fields.String(default=''),
-        'sequense': fields.String(default='')
-    }
-
-    pagination_fields = {
-        'total': fields.Integer(default=0),
-        'page': fields.Integer(default=1),
-        'per_page': fields.Integer(default=20),
-        'pages': fields.Integer(default=0)
-    }
-
     data_fields = {
-        'species_list': fields.List(fields.Nested(species_item_fields)),
-        'pagination': fields.Nested(pagination_fields)
+        'species_id': fields.Integer,
+        'chinese_name': fields.String(default=''),
+        'species_name': fields.String(default=''),
+        'order_name': fields.String(default=''),
+        'family_name': fields.String(default=''),
+        'cover_image': fields.String(default='') # 封面图
     }
-
-    return common_fields(data_fields)
+    # 包装的分页结构
+    list_schema = {
+        'species_list': fields.List(fields.Nested(data_fields)),
+        'pagination': fields.Nested({
+            'total': fields.Integer,
+            'page': fields.Integer,
+            'per_page': fields.Integer
+        })
+    }
+    return common_fields(list_schema)
 
 
 def audit_list_fields():

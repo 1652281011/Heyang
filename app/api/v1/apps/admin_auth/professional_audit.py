@@ -3,32 +3,36 @@ import time
 from flask import g, current_app
 from flask_restful import Resource
 
-from app.api.common import error_code
-from app.api.common.fields import professional_admin_list_fields, professional_audit_result_fields # 使用之前定义的列表字段过滤
-from app.api.common.parser import professional_audit_parser
-from app.api.common.response import success, error
-from app.models.base import db
+from app.models import db
 from app.models.users import User
 from app.models.professor import ProfessionalInfo
-from app.utils.decorators import login_required_admin
+from app.api.common.response import success, error
+from app.api.common.parser import professional_audit_parser
+from app.api.common.fields import professional_audit_result_fields
+from app.utils.decorators import admin_required, login_required
 
 class ProfessionalAuditResource(Resource):
-    method_decorators = [login_required_admin]
+    # 允许一般管理员(8)和高级管理员(9)操作
+    method_decorators = [admin_required, login_required]
 
     def post(self):
         """
-        管理员审核专业身份 (记录审核员信息)
+        管理员审核专业身份
         """
         args = professional_audit_parser()
         target_uid = args.get('user_id')
-        action = args.get('action') 
+        action = args.get('action')  # 1: 通过, 2: 驳回
         reason = args.get('reason')
 
-        pro_info = ProfessionalInfo.query.filter_by(user_id=target_uid).first()
+        # 1. 查询申请记录
+        pro_info = db.session.query(ProfessionalInfo).filter_by(user_id=target_uid).first()
         if not pro_info:
-            return error(error_code.USER_NOT_EXISTS, msg=u"记录不存在")
+            return error(msg=u"未找到该用户的申请记录")
         
-        user = User.query.get(target_uid)
+        # 2. 查询对应的用户账号
+        user = db.session.query(User).get(target_uid)
+        if not user:
+            return error(msg=u"关联用户不存在")
         
         try:
             now = int(time.time())
@@ -36,30 +40,30 @@ class ProfessionalAuditResource(Resource):
             pro_info.audit_time = now
             pro_info.e_time = now
             
-            # 【核心修改】记录当前操作的管理员ID
-            # g.admin 是在 login_required_admin 装饰器中被赋值的当前登录管理员对象
-            pro_info.auditor_id = g.admin.admin_id 
+            # 【核心修改】使用 g.user.id 记录当前审核的管理员
+            # 在你的 before_request 拦截器中，g.user 已经是当前登录的管理员对象
+            pro_info.admin_id = g.user.id 
 
-            if action == 1:
-                user.role_type = '2'
+            if str(action) == '1':
+                user.role_type = '2'  # 身份变更为“专业人员”
                 pro_info.reject_reason = ""
-                msg = u"已批准该专业身份"
-            elif action == 2:
-                user.role_type = '1'
+                msg = u"已批准该专业身份申请"
+            elif str(action) == '2':
+                user.role_type = '1'  # 恢复为“普通用户”
                 pro_info.reject_reason = reason if reason else u"材料不符合要求"
-                msg = u"已驳回该专业身份"
+                msg = u"已驳回该专业身份申请"
             else:
-                return error(error_code.PARAMETER_ERROR, msg=u"无效的操作")
+                return error(msg=u"无效的操作类型")
 
             db.session.commit()
             
-            # 刷新以加载 auditor 关联对象，确保 fields 能拿到名字
+            # 刷新以确保关联的 auditor (管理员) 对象能被 fields 正常解析
             db.session.refresh(pro_info)
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Audit Save Error: {str(e)}")
-            return error(error_code.DB_ERROR, msg=u"数据库保存失败")
+            current_app.logger.error(f"Professional Audit Error: {str(e)}")
+            return error(msg=u"数据库更新失败")
 
         return success(
             msg=msg, 

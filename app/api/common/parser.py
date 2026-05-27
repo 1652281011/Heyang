@@ -61,21 +61,128 @@ def species_detail_parser():
 def species_upload_parser():
     """物种上传/修改"""
     parser = reqparse.RequestParser()
-    # 核心控制字段
-    parser.add_argument('operate_type', type=str, required=True, choices=['add', 'update'], help='操作类型必须为 add 或 update', location='json')
-    parser.add_argument('scientific_name', type=str, required=True, location='json', help='物种学名不能为空')
+    parser.add_argument('operate_type', type=str, required=True, location='json', 
+                        help='操作类型不能为空 (add/update)')
     
-    # 业务数据字段
-    parser.add_argument('chinese_name', type=str, required=True, location='json')
-    parser.add_argument('english_name', type=str, location='json')
-    parser.add_argument('species', type=str, required=True, location='json')
-    parser.add_argument('order_name', type=str, required=True, location='json')
-    parser.add_argument('family', type=str, required=True, location='json')
-    parser.add_argument('description', type=str, location='json')
-    # 可根据需要补充 collection_province, grade 等字段
-    
+    # 目标物种ID：如果是 update，前端应传入该 ID
+    parser.add_argument('species_id', type=int, location='json')
+
+    parser.add_argument('chinese_name', type=str, required=True, location='json', help='中文名不能为空')
+    parser.add_argument('species_name', type=str, required=True, location='json', help='物种(学名)不能为空')
+    parser.add_argument('order_name', type=str, required=True, location='json', help='目名称不能为空')
+    parser.add_argument('family_name', type=str, required=True, location='json', help='科名称不能为空')
+
+    additional_fields = [
+        'english_name',           # 英文名
+        'nomenclator',            # 命名人
+        'naming_year',            # 命名年代
+        'type_specimen_record',   # 原始描述中记录模式标本
+        'type_locality',          # 模式标本采集地点
+        'latitude',               # 纬度
+        'longitude',              # 经度
+        'repository',             # 模式标本保存地
+        'repository_country',     # 模式标本保存国家
+        'synonyms',               # 同物异名
+        'subspecies',             # 亚种分化
+        'domestic_distribution',  # 国内分布
+        'foreign_distribution',   # 国外分布
+        'references',             # 引证文献
+        'diagnostic_features'     # 鉴别特征
+    ]
+
+    for field in additional_fields:
+        parser.add_argument(field, type=str, location='json', default='')
+
     return parser.parse_args()
 
+def species_audit_update_parser():
+    parser = reqparse.RequestParser()
+    # 必须知道修改哪条审核记录
+    parser.add_argument('audit_id', type=int, required=True, location='json', help='审核ID不能为空')
+    
+    # 物种业务字段 (复用之前的逻辑)
+    fields = [
+        'chinese_name', 'species_name', 'order_name', 'family_name',
+        'english_name', 'nomenclator', 'naming_year', 'type_locality',
+        'latitude', 'longitude', 'domestic_distribution', 'foreign_distribution',
+        'diagnostic_features', 'references', 'synonyms', 'subspecies'
+    ]
+    for f in fields:
+        parser.add_argument(f, type=str, location='json')
+        
+    return parser.parse_args()
+
+def species_edit_parser():
+    """管理员物种编辑接口解析器"""
+    parser = reqparse.RequestParser()
+    # 必须知道修改哪一条
+    parser.add_argument('species_id', type=int, required=True, help='物种ID不能为空', location='json')
+    
+    # 可选字段列表 (对应建表语句中的字段)
+    text_fields = [
+        'order_name', 'family_name', 'species_name', 'nomenclator', 'naming_year',
+        'chinese_name', 'english_name', 'type_specimen_record', 'type_locality',
+        'latitude', 'longitude', 'repository', 'repository_country', 'synonyms',
+        'subspecies', 'domestic_distribution', 'foreign_distribution', 
+        'references', 'diagnostic_features'
+    ]
+    
+    for field in text_fields:
+        parser.add_argument(field, type=str, location='json')
+        
+    return parser.parse_args()
+
+# app/api/common/parser.py
+
+def species_add_parser():
+    """新增物种信息解析器"""
+    parser = reqparse.RequestParser()
+    
+    # 必填核心字段
+    parser.add_argument('chinese_name', type=str, required=True, help='中文名不能为空', location='json')
+    parser.add_argument('species_name', type=str, required=True, help='物种(学名)不能为空', location='json')
+    parser.add_argument('order_name', type=str, required=True, help='目名称不能为空', location='json')
+    parser.add_argument('family_name', type=str, required=True, help='科名称不能为空', location='json')
+    
+    # 其他可选业务字段
+    fields = [
+        'english_name', 'nomenclator', 'naming_year', 'type_specimen_record',
+        'type_locality', 'latitude', 'longitude', 'repository', 
+        'repository_country', 'synonyms', 'subspecies', 
+        'domestic_distribution', 'foreign_distribution', 
+        'references', 'diagnostic_features'
+    ]
+    for f in fields:
+        parser.add_argument(f, type=str, location='json', default='')
+        
+    return parser.parse_args()
+
+def media_manage_parser():
+    parser = reqparse.RequestParser()
+    
+    # 对于上传接口，location 优先级：form > values
+    # 不要包含 'json'，因为 multipart 请求里根本没有 JSON
+    parser.add_argument('media_id', type=int, location='form')
+    parser.add_argument('species_id', type=int, location='form')
+    parser.add_argument('media_type', type=str, location='form')
+    parser.add_argument('title', type=str, location='form')
+    parser.add_argument('media_category', type=str, location='form', default='普通')
+    parser.add_argument('morphology_type', type=str, location='form')
+    parser.add_argument('model_category', type=str, location='form')
+    parser.add_argument('is_cover', type=int, location='form', default=0)
+    parser.add_argument('sort_order', type=int, location='form', default=0)
+    
+    # 文件必须在 files
+    parser.add_argument('file', type=werkzeug.datastructures.FileStorage, location='files')
+    parser.add_argument('thumbnail_file', type=werkzeug.datastructures.FileStorage, location='files')
+    
+    return parser
+
+def species_import_parser():
+    parser = reqparse.RequestParser()
+    # 接收名为 'file' 的文件对象
+    parser.add_argument('file', type=werkzeug.datastructures.FileStorage, location='files', required=True, help='请上传.csv, .xlsx或.xls文件')
+    return parser.parse_args()
 
 # 管理员 (Admin) 相关解析器
 def admin_sign_in_parser():
@@ -204,22 +311,31 @@ def post_interact_parser():
 
 
 # 用户通用参数
+def email_code_parser():
+    """合并后的验证码参数解析"""
+    parser = reqparse.RequestParser()
+    parser.add_argument('email', type=str, location='json', required=True, help=u'邮箱必填')
+    # type: '1' 代表注册, '2' 代表找回密码
+    parser.add_argument('type', type=str, location='json', required=True, choices=('1', '2'), help=u'验证码类型错误')
+    return parser.parse_args()
 
 def user_register_parser():
-    parser = reqparse.RequestParser()
-
-    parser.add_argument('username', type=is_mobile, location='json', required=True, help=u'手机号')
-    parser.add_argument('password', type=str, location='json', required=True, help=u'密码')
-
-    return parser.parse_args()
+    p = reqparse.RequestParser()
+    p.add_argument('username', type=str, location='json', required=True, help=u'自定义账号必填')
+    p.add_argument('email', type=str, location='json', required=True, help=u'邮箱必填')
+    p.add_argument('password', type=str, location='json', required=True, help=u'密码必填')
+    p.add_argument('code', type=str, location='json', required=True, help=u'验证码必填')
+    p.add_argument('nickname', type=str, location='json', default=u'momo')
+    # 注册接口虽然能接收 role_type，但 Service 会强制设为 '1'
+    p.add_argument('role_type', type=str, location='json', default='1')
+    return p.parse_args()
 
 def user_sign_in_parser():
-    parser = reqparse.RequestParser()
+    p = reqparse.RequestParser()
+    p.add_argument('username', type=str, location='json', required=True, help=u'账号或邮箱必填')
+    p.add_argument('password', type=str, location='json', required=True, help=u'密码必填')
+    return p.parse_args()
 
-    parser.add_argument('username', type=is_mobile, location='json', required=True, help=u'手机号')
-    parser.add_argument('password', type=str, location='json', required=True, help=u'密码')
-    
-    return parser.parse_args()
 
 def user_update_parser():
     """修改基本信息参数"""
@@ -229,6 +345,7 @@ def user_update_parser():
                         location='files', required=False)
     parser.add_argument('bio', type=str, location='form', required=False, help=u'简介')
     parser.add_argument('email', type=str, location='form', required=False, help=u'邮箱')
+    parser.add_argument('code', type=str, location='form') 
 
     parser.add_argument('tag_action', type=str, location='form', required=False, help=u'标签操作')
     parser.add_argument('tag_name', type=str, location='form', required=False, help=u'标签内容')
@@ -240,6 +357,13 @@ def user_password_update_parser():
     parser.add_argument('old_password', type=str, location='json', required=True, help=u'旧密码必填')
     parser.add_argument('new_password', type=str, location='json', required=True, help=u'新密码必填')
     return parser.parse_args()
+
+def user_reset_password_parser():
+    p = reqparse.RequestParser()
+    p.add_argument('email', type=str, location='json', required=True, help=u'邮箱必填')
+    p.add_argument('code', type=str, location='json', required=True, help=u'验证码必填')
+    p.add_argument('new_password', type=str, location='json', required=True, help=u'新密码必填')
+    return p.parse_args()
 
 # --- 1. AI识别预览阶段 ---
 def species_ident_preview_parser():
@@ -253,6 +377,13 @@ def species_ident_preview_parser():
         required=True, 
         help=u'请上传待识别的物种图片'
     )
+    return parser.parse_args()
+
+def species_post_detail_parser():
+    """获取单个鉴定贴详情的参数解析"""
+    parser = reqparse.RequestParser()
+    # location='args' 表示从 URL Query String (?post_id=1) 中获取
+    parser.add_argument('post_id', type=int, required=True, location='args', help=u'帖子ID不能为空')
     return parser.parse_args()
 
 # --- 2. 广场列表筛选阶段 ---
@@ -302,10 +433,42 @@ def species_vote_parser():
 
 # --- 5. 专家确认阶段 ---
 def species_expert_confirm_parser():
-    """专家或管理员最终确认物种结果"""
+    """专家鉴定提交参数"""
     parser = reqparse.RequestParser()
-    parser.add_argument('post_id', type=int, required=True, location='json', help=u'帖子ID不能为空')
-    parser.add_argument('candidate_id', type=int, required=True, location='json', help=u'确定的正确候选标签ID不能为空')
+    parser.add_argument('post_id', type=int, required=True, location='json', help="帖子ID不能为空")
+    parser.add_argument('candidate_id', type=int, required=True, location='json', help="必须选择一个最终物种标签")
+    parser.add_argument('opinion', type=str, required=True, location='json', help="专家参考意见不能为空")
+    return parser.parse_args()
+
+def species_my_post_parser():
+    parser = reqparse.RequestParser()
+    parser.add_argument('page', type=int, default=1, location='args')
+    parser.add_argument('per_page', type=int, default=10, location='args')
+    # 可选：按状态过滤自己的帖子 (0:进行中, 1:已完成)
+    parser.add_argument('status', type=int, location='args')
+    parser.add_argument('date_range', type=str, default='all', 
+                        choices=['today', 'week', 'month', 'all'], location='args')
+    parser.add_argument('start_date', type=str, location='args', help="开始日期，如 2023-10-01")
+    parser.add_argument('end_date', type=str, location='args', help="结束日期，如 2023-10-31")
+    return parser.parse_args()
+
+def species_voted_post_parser():
+    parser = reqparse.RequestParser()
+    parser.add_argument('page', type=int, default=1, location='args')
+    parser.add_argument('per_page', type=int, default=10, location='args')
+    parser.add_argument('status', type=int, location='args') # 0:进行中, 1:已完成
+    
+    # 日期筛选（基于投票时间）
+    parser.add_argument('date_range', type=str, location='args', choices=['today', 'week', 'month', 'all'])
+    parser.add_argument('start_date', type=str, location='args')
+    parser.add_argument('end_date', type=str, location='args')
+    
+    return parser.parse_args()
+
+def species_post_delete_parser():
+    parser = reqparse.RequestParser()
+    # 接收要删除的帖子ID
+    parser.add_argument('post_id', type=int, required=True, location='json', help="帖子ID不能为空")
     return parser.parse_args()
 
 def wx_login_parser():

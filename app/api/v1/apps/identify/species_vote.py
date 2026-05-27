@@ -1,69 +1,80 @@
 # -*- coding: utf-8 -*-
-import time
-from flask import request
+from os import error
+from flask import g
 from flask_restful import Resource
-from app.api.common.response import success, error
+from app.api.common.fields import get_vote_res_fields
 from app.api.common.parser import species_vote_parser
-from app.api.common.fields import op_id_fields
+from app.api.common.response import success
 from app.models.identification import SpeciesPost, SpeciesCandidate, SpeciesVote
-from app.models.users import User
 from app.models.base import db
+import time
+
+from app.utils.decorators import login_required
 
 class SpeciesVoteAction(Resource):
-    def post(self):
-        # 1. 安全校验：从 Header 获取 Auth-Token 并提取当前用户
-        auth_token = request.headers.get('Auth-Token')
-        if not auth_token:
-            return error(resid=401, msg='未提供 Auth-Token，请登录')
-        
-        user = User.verify_auth_token(auth_token)
-        if not user:
-            return error(resid=401, msg='登录过期或 Token 无效')
+    method_decorators = [login_required]
 
-        # 2. 参数解析
+    def post(self):
+        user = g.user
         args = species_vote_parser()
         post_id = args['post_id']
-        candidate_id = args['candidate_id']
-
-        # 3. 业务防重校验：检查该用户是否已经对该帖子投过票
-        # 依靠数据库的 UNIQUE KEY (user_id, post_id) 也可以保证，但这里先进行业务拦截
-        exists = SpeciesVote.query.filter_by(user_id=user.id, post_id=post_id).first()
-        if exists:
-            return error(msg='您已参与过该鉴定，请勿重复投票')
+        new_cand_id = args['candidate_id']
 
         try:
-            # 4. 执行原子性操作 (事务)
-            
-            # A. 插入投票详情记录
-            new_vote = SpeciesVote(
-                user_id=user.id,        # 关键：使用 Token 中的 user.id
-                post_id=post_id,
-                candidate_id=candidate_id,
-                c_time=int(time.time()),
-                e_time=int(time.time())
-            )
-            db.session.add(new_vote)
-
-            # B. 对应候选词条的 vote_count 自增
-            candidate = SpeciesCandidate.query.get(candidate_id)
-            if not candidate or candidate.post_id != post_id:
-                return error(msg='候选词条不存在或不属于该帖子')
-            candidate.vote_count += 1
-
-            # C. 主贴的参与人数 participant_count 自增
+            # 1. 查找该用户在该贴的投票记录
+            vote_rec = SpeciesVote.query.filter_by(user_id=user.id, post_id=post_id).first()
             post = SpeciesPost.query.get(post_id)
-            if post:
+            if not post:
+                return error(msg='帖子不存在')
+
+            if vote_rec:
+                # --- A. 修改投票逻辑 ---
+                if vote_rec.candidate_id == new_cand_id:
+                    # 如果投的是同一项，直接返回当前状态
+                    post.my_vote_id = new_cand_id
+                    return success(msg='已投过该项', data=post, data_fileds=get_vote_res_fields())
+
+                # 减去旧标签票数
+                old_cand = SpeciesCandidate.query.get(vote_rec.candidate_id)
+                if old_cand:
+                    old_cand.vote_count = max(0, old_cand.vote_count - 1)
+
+                # 更新记录
+                vote_rec.candidate_id = new_cand_id
+                vote_rec.e_time = int(time.time())
+                msg = '投票已修改'
+            else:
+                # --- B. 新增投票逻辑 ---
+                db.session.add(SpeciesVote(
+                    user_id=user.id,
+                    post_id=post_id,
+                    candidate_id=new_cand_id,
+                    c_time=int(time.time()),
+                    e_time=int(time.time())
+                ))
+                # 帖子总参与人数 +1
                 post.participant_count += 1
-            
-            # 5. 提交数据库
+                msg = '投票成功'
+
+            # 无论新增还是修改，新标签票数都要 +1
+            new_cand = SpeciesCandidate.query.get(new_cand_id)
+            if new_cand:
+                new_cand.vote_count += 1
+
+            # 2. 提交到数据库
             db.session.commit()
-            
+
+            # 3. 关键：刷新 post 对象，确保 candidates 列表也是最新的
+            db.session.refresh(post)
+            # 动态注入 my_vote_id 供 fields 映射
+            post.my_vote_id = new_cand_id
+
             return success(
-                msg='投票成功', 
-                data={'id': new_vote.id}, 
-                data_fileds=op_id_fields()
+                msg=msg, 
+                data=post, 
+                data_fileds=get_vote_res_fields()
             )
 
         except Exception as e:
             db.session.rollback()
-            return error(msg=f'投票系统繁忙: {str(e)}')
+            return error(msg=f"操作失败: {str(e)}")

@@ -9,82 +9,27 @@ from app.api.common.parser import user_update_parser
 from app.api.common.response import success, error
 from app.models.base import db
 from app.models.users import User
+from app.services.user.user_service import UserService
 from app.utils.decorators import login_required
 from app.utils.uploader import Uploader
 
 class UserInfoResource(Resource):
+    # 依然保留登录限制
     method_decorators = [login_required]
 
     def post(self):
-
-        # 1. 解析参数
+        """更新用户信息接口"""
         args = user_update_parser()
-        nickname = args.get('nickname')
-        avatar_file = args.get('avatar')
-        bio = args.get('bio')
-        email = args.get('email')
-        tag_action = args.get('tag_action')
-        tag_name = args.get('tag_name')
 
-        # 2. 获取当前用户对象
-        user = User.query.get(g.user.id)
-        if not user:
-            return error(error_code.USER_NOT_EXISTS, msg=u"用户不存在")
+        data, code, msg = UserService.update_profile(g.user.id, args)
 
-        # 3. 执行业务逻辑
-        # 处理标签
-        if tag_action and tag_name:
-            if tag_action == "add":
-                user.add_tag(tag_name)
-            elif tag_action == "delete":
-                user.delete_tag(tag_name)
+        # 3. 错误处理
+        if not data:
+            return error(resid=code, msg=msg)
 
-        # 处理基本文本
-        if nickname:
-            user.nickname = nickname
-        if bio is not None:
-            user.bio = bio
-
-        # 处理邮箱唯一性
-        if email:
-            is_exist = User.query.filter(User.email == email, User.id != user.id).first()
-            if is_exist:
-                return error(error_code.DB_ERROR, msg=u"该邮箱已被占用")
-            user.email = email
-
-        # 处理头像
-        if avatar_file:
-            config = {
-                "pathFormat": "uploads/avatar/{yyyy}{mm}{dd}/{time}{rand:6}",
-                "maxSize": 2 * 1024 * 1024,
-                "allowFiles": [".png", ".jpg", ".jpeg", ".gif"],
-                "oriName": avatar_file.filename
-            }
-            uploader = Uploader(avatar_file, config, current_app.static_folder)
-            if uploader.stateInfo == "SUCCESS":
-                user.avatar = uploader.getFileInfo()['url']
-            else:
-                return error(error_code.FILE_UPLOAD_ERROR, msg=uploader.stateInfo)
-
-        # 4. 更新修改时间 (防止 SQL 报错并记录活跃)
-        user.e_time = int(time.time())
-
-        # 5. 提交数据库
-        try:
-            db.session.add(user)
-            db.session.commit()
-            db.session.refresh(user)
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Update User Error: {str(e)}")
-            return error(error_code.DB_ERROR, msg=u"数据库保存失败")
-
-        # 6. 构造返回数据 (与 SignIn 逻辑一致)
-        data = user.to_dict()
-        
-        # 7. 返回结果并使用 fields 过滤
+        # 4. 成功返回 (严格保持你要求的样式)
         return success(
-            msg=u"资料更新成功", 
+            msg=msg, 
             data=data, 
             data_fileds=user_upd_fields()
         )

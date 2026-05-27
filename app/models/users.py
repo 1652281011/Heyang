@@ -9,7 +9,7 @@ class User(db.Model, BaseModel):
     __tablename__ = 'user_info'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    username = db.Column(db.String(20), unique=True, index=True, comment='手机号/账号')
+    username = db.Column(db.String(20), unique=True, index=True, comment='账号')
     password = db.Column(db.String(500), nullable=False, comment='哈希密码')
     nickname = db.Column(db.String(50), nullable=False, comment='昵称')
     avatar = db.Column(db.String(255), comment='头像地址')
@@ -23,7 +23,12 @@ class User(db.Model, BaseModel):
 
     openid = db.Column(db.String(100), unique=True, index=True)
 
-    pro_info = db.relationship('ProfessionalInfo', back_populates='user', uselist=False)
+    pro_info = db.relationship(
+        'ProfessionalInfo', 
+        backref='user_account', 
+        uselist=False, 
+        foreign_keys='ProfessionalInfo.user_id' # 关键：指定这个关联字段
+    )
 
 
 
@@ -154,16 +159,27 @@ class User(db.Model, BaseModel):
         return False
 
     @classmethod
-    def create_user(cls, username, nickname, password_plain, role_type="1"):
+    def create_user(cls, username, nickname, password_plain, role_type="1", email=None):
         try:
-            user = cls(username=username, nickname=nickname, role_type=str(role_type))
+            # 基础查重
+            if cls.query.filter_by(username=username).first():
+                return None, u"该账号已存在"
+            if email and cls.query.filter_by(email=email).first():
+                return None, u"该邮箱已被注册"
+
+            user = cls(
+                username=username, 
+                nickname=nickname, 
+                role_type=str(role_type), 
+                email=email
+            )
             user.password = generate_password_hash(password_plain)
             now = int(time.time())
             user.c_time = now
             user.e_time = now
             db.session.add(user)
             db.session.commit()
-            return user, "注册成功"
+            return user, u"注册成功"
         except Exception as e:
             db.session.rollback()
             return None, str(e)
