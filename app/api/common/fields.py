@@ -178,8 +178,8 @@ def post_detail_fields():
         'id': fields.Integer,
         'content': fields.String,
         'nickname': fields.String(attribute='user.nickname'), # 关联获取评论者昵称
-        'avatar': fields.String(attribute='user.avatar'),     # 关联获取评论者头像
-        'create_time': fields.String(attribute='c_time_str')  # 模型中的格式化时间
+        'avatar': fields.String(attribute='user.avatar_url'),       
+        'create_time': fields.String(attribute='c_time_str')
     }
 
     # 2. 详情主体格式
@@ -194,7 +194,7 @@ def post_detail_fields():
         'images': fields.List(fields.String(attribute='url')), # 图片URL列表
         'author': {
             'nickname': fields.String(attribute='author.nickname'),
-            'avatar': fields.String(attribute='author.avatar'),
+            'avatar': fields.String(attribute='author.avatar_url'),
         },
         'comments': fields.List(fields.Nested(comment_item)), # 评论列表嵌套
         'create_time': fields.String(attribute='c_time_str')

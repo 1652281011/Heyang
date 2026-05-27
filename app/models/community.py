@@ -110,3 +110,11 @@ class Comment(db.Model, BaseModel):
             "content": self.content,
             "create_time": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
         }
+    
+    @property
+    def c_time_str(self):
+        """将 c_time 整数时间戳转为标准字符串"""
+        # 注意：这里需要确保你的 BaseModel 里有 c_time 字段，或者这里直接用 self.c_time
+        if not hasattr(self, 'c_time') or not self.c_time:
+            return ""
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.c_time))
