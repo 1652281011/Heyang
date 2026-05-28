@@ -571,47 +571,6 @@ class Expert(db.Model):
             db.session.rollback()
             return False
 
-    def to_dict(self):
-        """转换为字典"""
-        res = {
-            'expert_id': self.expert_id,
-            'username': self.username,
-            'email': self.email,
-            'mobile': self.mobile,
-            'real_name': self.real_name,
-            'title': self.title,
-            'organization': self.organization,
-            'research_field': self.research_field,
-            'introduction': self.introduction,
-            'avatar': self.avatar,
-            'is_approved': self.is_approved,
-            'approval_status': self.approval_status,
-            'status': self.status,
-            'gender': self.gender,
-            'birth_date': self.birth_date,
-            'degree': self.degree,
-            'work_years': self.work_years,
-            'last_login': time_to_str(self.last_login) if self.last_login else None,
-            'last_login_ip': self.last_login_ip,
-            'login_count': self.login_count,
-            'create_time': time_to_str(self.create_time) if self.create_time else None,
-            'update_time': time_to_str(self.update_time) if self.update_time else None
-        }
-        
-        # 如果有审批信息
-        if self.approved_by:
-            from app.models.admin import Admin
-            admin = Admin.query.filter_by(admin_id=self.approved_by).first()
-            res['approved_by'] = {
-                'admin_id': self.approved_by,
-                'username': admin.username if admin else None,
-                'real_name': admin.real_name if admin else None
-            }
-            res['approved_time'] = time_to_str(self.approved_time) if self.approved_time else None
-            res['approval_notes'] = self.approval_notes
-        
-        return res
-
     def to_simple_dict(self):
         """简略信息"""
         return {
